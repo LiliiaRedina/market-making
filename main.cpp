@@ -263,8 +263,8 @@ int main() {
     const long long FEEDBACK_LATENCY = 1000000000;
     const long long POST_LATENCY = 1000000000;
     Simulator simulator(INIT_RECEIVED, FEEDBACK_LATENCY, POST_LATENCY,
-                        "D:/CLionProjects/untitled/md/md/btcusdt_Binance_LinearPerpetual/lobs.csv",
-                        "D:/CLionProjects/untitled/md/md/btcusdt_Binance_LinearPerpetual/trades.csv");
+                        "C:/CLionProjects/market-making/md/md/btcusdt_Binance_LinearPerpetual/lobs.csv",
+                        "C:/CLionProjects/market-making/md/md/btcusdt_Binance_LinearPerpetual/trades.csv");
 
     double capital_usdt = 0;
     double capital_btc = 0;
@@ -330,7 +330,7 @@ int main() {
         }
     }
 
-    std::ofstream file("D:/CLionProjects/untitled/results.txt");
+    std::ofstream file("C:/CLionProjects/market-making/results.txt");
     for (auto capital : capital_usdt_history) {
         file << capital << " ";
     }
