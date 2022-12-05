@@ -258,6 +258,74 @@ public:
     }
 };
 
+class Strategy {
+    std::vector<double> prices;
+    double price_ask;
+    double price_bid;
+    long long current_time;
+    long long start_time;
+    long long end_time;
+    Simulator simulator;
+    std::unordered_map<size_t, Order> orders;
+    std::queue<size_t> order_id_for_cancel;
+    double capital_cash;
+    double capital_coin;
+    std::vector<double> history_capital_cash;
+    std::vector<double> history_capital_coin;
+    std::vector<double> history_capital_common;
+    std::vector<long long> history_ts;
+
+    void launch_strategy() {
+        while(!simulator.market_orderbooks.empty() || !simulator.market_trades.empty()) {
+//        std::cout << simulator.ts <<  ' ' << simulator.strategy_updates.size() << '\n';
+            auto res = simulator.tick();
+            while (res.first.type == TRADE) {
+                res = simulator.tick();
+            }
+            MarketData md = res.first;
+            std::vector<Feedback> feedback = res.second;
+
+            double mid_price = (md.orderbook.ask_orderbook[0].first + md.orderbook.bid_orderbook[0].first) / 2;
+
+            size_t id_order = simulator.place_order(order);
+            orders.insert({id_order, order});
+
+            for (auto& feedback : res.second) {
+                if (feedback.type == EXECUTE_ORDER) {
+                    if (orders[feedback.id_order].type == ASK) {
+                        capital_usdt += orders[feedback.id_order].price * orders[feedback.id_order].volume;
+                        capital_btc -= orders[feedback.id_order].volume;
+                    } else if (orders[feedback.id_order].type == BID) {
+                        capital_usdt -= orders[feedback.id_order].price * orders[feedback.id_order].volume;
+                        capital_btc += orders[feedback.id_order].volume;
+                    }
+                }
+            }
+
+            capital_usdt_history.push_back(capital_usdt);
+            capital_btc_history.push_back(capital_btc);
+            capital_sum_history.push_back(capital_usdt + capital_btc * mid_price_current);
+
+
+        }
+
+    }
+
+    void place_orders() {
+        Order order_ask(price_ask, 0.001, KILL_TIME, ASK);
+        size_t order_id = simulator.place_order(order_ask);
+        orders.insert({order_id, order_ask});
+
+        Order order_bid(price_bid, 0.001, KILL_TIME, BID);
+        order_id = simulator.place_order(order_bid);
+        orders.insert({order_id, order_bid});
+    }
+
+    void update_prices_ask_bid() {
+
+    }
+};
+
 int main() {
     const long long INIT_RECEIVED = 1655942402249000000;
     const long long FEEDBACK_LATENCY = 1000000000;
