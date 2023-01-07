@@ -400,7 +400,7 @@ public:
             prices_sum_squares += mid_price * mid_price;
             prices_num++;
             double sigma_squared = prices_sum_squares / prices_num - pow(prices_sum / prices_num, 2);
-            double omega = gamma * gamma * sigma_squared * (capital_coin_bound) * (capital_coin_bound) / 2;
+            double omega = gamma * gamma * sigma_squared * (capital_coin_bound + 1) * (capital_coin_bound + 1) / 2;
 
             double ra = mid_price + 1 / gamma * log(1 + (1 - 2 * capital_coin) * gamma * gamma *
                                                         sigma_squared / (2 * omega -
