@@ -6,8 +6,9 @@
 #include <unordered_map>
 #include <queue>
 #include <deque>
+#include "math.h"
 
-std::vector<std::string> split(const std::string& s, char delim) {
+std::vector<std::string> split(const std::string &s, char delim) {
     std::stringstream ss(s);
     std::string token;
     std::vector<std::string> tokens;
@@ -17,7 +18,7 @@ std::vector<std::string> split(const std::string& s, char delim) {
     return tokens;
 }
 
-std::vector<std::vector<std::string>> readFile(const std::string& path) {
+std::vector<std::vector<std::string>> readFile(const std::string &path) {
     std::ifstream file(path);
     if (!file.good()) {
         std::cerr << path << " not found" << std::endl;
@@ -34,11 +35,21 @@ std::vector<std::vector<std::string>> readFile(const std::string& path) {
     return units;
 }
 
-enum OrderType {ASK, BID};
-enum ActWithOrder {EXECUTE, KILL, SKIP};
-enum ActionType {CANCEL, PLACE};
-enum MarketDataType {ORDERBOOK, TRADE};
-enum FeedbackType {EXECUTE_ORDER, CANCEL_ORDER};
+enum OrderType {
+    ASK, BID
+};
+enum ActWithOrder {
+    EXECUTE, KILL, SKIP
+};
+enum ActionType {
+    CANCEL, PLACE
+};
+enum MarketDataType {
+    ORDERBOOK, TRADE
+};
+enum FeedbackType {
+    EXECUTE_ORDER, CANCEL_ORDER
+};
 
 class Orderbook {
 public:
@@ -61,9 +72,11 @@ public:
     Orderbook orderbook;
     Trade trade;
 
-    MarketData() = default;
+    MarketData() {
+        receive_ts = -1;
+    };
 
-    MarketData(const std::vector<std::string>& line, MarketDataType type) {
+    MarketData(const std::vector<std::string> &line, MarketDataType type) {
         this->type = type;
         if (type == ORDERBOOK) {
             receive_ts = std::stoll(line[0]);
@@ -106,6 +119,7 @@ public:
 
     Action(ActionType type, long long time, Order order, size_t id_order) : type(type), time(time),
                                                                             order(order), id_order(id_order) {}
+
     Action(ActionType type, long long time, size_t id_order) : type(type), time(time), id_order(id_order) {}
 };
 
@@ -124,27 +138,28 @@ public:
     size_t id_order_counter;
 
     Simulator(long long init_ts, long long execute_latency, long long feedback_latency,
-              const std::string& path_orderbooks, const std::string& path_trades):
+              const std::string &path_orderbooks, const std::string &path_trades) :
             ts(init_ts), execute_latency(execute_latency), feedback_latency(feedback_latency),
             index_market_orderbooks(0), index_market_trades(0), id_order_counter(0) {
         std::vector<std::vector<std::string>> data_orderbook = readFile(path_orderbooks);
-        for (auto& line : data_orderbook) {
+        for (auto &line: data_orderbook) {
             market_orderbooks.emplace_back(line, ORDERBOOK);
         }
 
         std::vector<std::vector<std::string>> data_trades = readFile(path_trades);
-        for (auto& line : data_trades) {
+        for (auto &line: data_trades) {
             market_trades.emplace_back(line, TRADE);
         }
     }
 
     void update_market() {
-//        std::cout << "uuuuuuuuuuuuuuuuuuu " << index_market_orderbooks << " " << market_orderbooks.size() << " " << market_orderbooks[index_market_orderbooks].exchange_ts << " " << ts << '\n';
         MarketData market_data;
-        while((index_market_orderbooks < market_orderbooks.size() && market_orderbooks[index_market_orderbooks].exchange_ts < ts)
-              || (index_market_trades < market_trades.size() && market_trades[index_market_trades].exchange_ts < ts)) {
+        while ((index_market_orderbooks < market_orderbooks.size() &&
+                market_orderbooks[index_market_orderbooks].exchange_ts < ts)
+               || (index_market_trades < market_trades.size() && market_trades[index_market_trades].exchange_ts < ts)) {
             if (index_market_trades >= market_trades.size() || (index_market_orderbooks < market_orderbooks.size() &&
-                                                                market_orderbooks[index_market_orderbooks].exchange_ts < market_trades[index_market_trades].exchange_ts)) {
+                                                                market_orderbooks[index_market_orderbooks].exchange_ts <
+                                                                market_trades[index_market_trades].exchange_ts)) {
                 market_data = market_orderbooks[index_market_orderbooks];
                 ++index_market_orderbooks;
             } else {
@@ -165,7 +180,7 @@ public:
 
     void execute_orders(MarketData market_data) {
         std::vector<size_t> id_cancel;
-        for (auto& [id, order] : active_orders) {
+        for (auto &[id, order]: active_orders) {
             if (market_data.type == ORDERBOOK) {
                 if (order.type == BID) {
                     if (market_data.orderbook.ask_orderbook[0].first <= order.price) {
@@ -186,7 +201,7 @@ public:
                 }
             }
         }
-        for (auto id : id_cancel) {
+        for (auto id: id_cancel) {
             active_orders.erase(id);
         }
     }
@@ -247,9 +262,8 @@ public:
         return {new_market_data, feedback};
     }
 
-    size_t place_order(const Order& order) {
+    size_t place_order(const Order &order) {
         actions.push({PLACE, ts + execute_latency, order, id_order_counter});
-//        std::cout << actions.size() << '\n';
         return id_order_counter++;
     }
 
@@ -259,158 +273,214 @@ public:
 };
 
 class Strategy {
-    std::vector<double> prices;
-    double price_ask;
-    double price_bid;
+public:
+    double prices_sum_squares = 0.0;
+    double prices_sum = 0.0;
+    double prices_num = 0;
+    double gamma;
+    double capital_coin_bound;
+
     long long current_time;
     long long start_time;
     long long end_time;
-    Simulator simulator;
+
+    Simulator &simulator;
+
     std::unordered_map<size_t, Order> orders;
-    std::queue<size_t> order_id_for_cancel;
-    double capital_cash;
-    double capital_coin;
+    std::unordered_map<size_t, long long> orders_ts;
+    std::queue<size_t> orders_queue;
+    long long kill_time;
+
+    double capital_cash = 0.0;
+    double capital_coin = 0.0;
     std::vector<double> history_capital_cash;
     std::vector<double> history_capital_coin;
     std::vector<double> history_capital_common;
     std::vector<long long> history_ts;
 
-    void launch_strategy() {
-        while(!simulator.market_orderbooks.empty() || !simulator.market_trades.empty()) {
-//        std::cout << simulator.ts <<  ' ' << simulator.strategy_updates.size() << '\n';
+
+    Strategy(double gamma, double capital_coin_bound, long long int startTime, long long int endTime,
+             Simulator &simulator, long long int killTime) : gamma(gamma), capital_coin_bound(capital_coin_bound),
+                                                             start_time(startTime), end_time(endTime),
+                                                             simulator(simulator), kill_time(killTime) {}
+
+    void kill_orders(long long ts) {
+        while (!orders_queue.empty() && orders_ts[orders_queue.front()] + kill_time < ts) {
+            simulator.cancel_order(orders_queue.front());
+            orders_queue.pop();
+        }
+    }
+
+    void place_order(Order &order) {
+        size_t id = simulator.place_order(order);
+        orders.insert({id, order});
+        orders_ts.insert({id, current_time});
+        orders_queue.push(id);
+    }
+
+    void launch_strategy_finite() {
+        while (true) {
             auto res = simulator.tick();
+            if (res.first.receive_ts == -1 || res.first.receive_ts > end_time) {
+                break;
+            }
+
+            kill_orders(res.first.receive_ts);
             while (res.first.type == TRADE) {
                 res = simulator.tick();
+                kill_orders(res.first.receive_ts);
             }
             MarketData md = res.first;
-            std::vector<Feedback> feedback = res.second;
+            std::vector<Feedback> feedbacks = res.second;
+
 
             double mid_price = (md.orderbook.ask_orderbook[0].first + md.orderbook.bid_orderbook[0].first) / 2;
+            current_time = md.receive_ts;
+            double time_coeff = ((double) (end_time - current_time)) / ((double) (end_time - start_time));
+            prices_sum += mid_price;
+            prices_sum_squares += mid_price * mid_price;
+            prices_num++;
+            double sigma_squared = prices_sum_squares / prices_num - pow(prices_sum / prices_num, 2);
 
-            size_t id_order = simulator.place_order(order);
-            orders.insert({id_order, order});
 
-            for (auto& feedback : res.second) {
+            double ra = mid_price + (1 - 2 * capital_coin) * gamma * sigma_squared * time_coeff / 2;
+            double rb = mid_price + (-1 - 2 * capital_coin) * gamma * sigma_squared * time_coeff / 2;
+
+            Order bid_order;
+            bid_order.price = rb;
+            bid_order.volume = 0.001;
+            bid_order.type = BID;
+            place_order(bid_order);
+
+            Order ask_order;
+            ask_order.price = ra;
+            ask_order.volume = 0.001;
+            ask_order.type = ASK;
+            place_order(ask_order);
+
+
+            for (auto &feedback: feedbacks) {
                 if (feedback.type == EXECUTE_ORDER) {
                     if (orders[feedback.id_order].type == ASK) {
-                        capital_usdt += orders[feedback.id_order].price * orders[feedback.id_order].volume;
-                        capital_btc -= orders[feedback.id_order].volume;
+                        capital_cash += orders[feedback.id_order].price * orders[feedback.id_order].volume;
+                        capital_coin -= orders[feedback.id_order].volume;
                     } else if (orders[feedback.id_order].type == BID) {
-                        capital_usdt -= orders[feedback.id_order].price * orders[feedback.id_order].volume;
-                        capital_btc += orders[feedback.id_order].volume;
+                        capital_cash -= orders[feedback.id_order].price * orders[feedback.id_order].volume;
+                        capital_coin += orders[feedback.id_order].volume;
                     }
                 }
             }
 
-            capital_usdt_history.push_back(capital_usdt);
-            capital_btc_history.push_back(capital_btc);
-            capital_sum_history.push_back(capital_usdt + capital_btc * mid_price_current);
-
-
+            history_capital_cash.push_back(capital_cash);
+            history_capital_coin.push_back(capital_coin);
+            history_capital_common.push_back(capital_cash + capital_coin * mid_price);
         }
 
     }
 
-    void place_orders() {
-        Order order_ask(price_ask, 0.001, KILL_TIME, ASK);
-        size_t order_id = simulator.place_order(order_ask);
-        orders.insert({order_id, order_ask});
+    void launch_strategy_infinite() {
+        while (true) {
+            auto res = simulator.tick();
+            if (res.first.receive_ts == -1 || res.first.receive_ts > end_time) {
+                break;
+            }
 
-        Order order_bid(price_bid, 0.001, KILL_TIME, BID);
-        order_id = simulator.place_order(order_bid);
-        orders.insert({order_id, order_bid});
-    }
+            kill_orders(res.first.receive_ts);
+            while (res.first.type == TRADE) {
+                res = simulator.tick();
+                kill_orders(res.first.receive_ts);
+            }
+            MarketData md = res.first;
+            std::vector<Feedback> feedbacks = res.second;
 
-    void update_prices_ask_bid() {
+
+            double mid_price = (md.orderbook.ask_orderbook[0].first + md.orderbook.bid_orderbook[0].first) / 2;
+            current_time = md.receive_ts;
+            prices_sum += mid_price;
+            prices_sum_squares += mid_price * mid_price;
+            prices_num++;
+            double sigma_squared = prices_sum_squares / prices_num - pow(prices_sum / prices_num, 2);
+            double omega = gamma * gamma * sigma_squared * (capital_coin_bound) * (capital_coin_bound) / 2;
+
+            double ra = mid_price + 1 / gamma * log(1 + (1 - 2 * capital_coin) * gamma * gamma *
+                                                        sigma_squared / (2 * omega -
+                                                                         gamma * gamma * capital_coin * capital_coin *
+                                                                         sigma_squared));
+            double rb = mid_price + mid_price + 1 / gamma * log(1 + (-1 - 2 * capital_coin) * gamma * gamma *
+                                                                    sigma_squared / (2 * omega -
+                                                                                     gamma * gamma * capital_coin *
+                                                                                     capital_coin * sigma_squared));
+
+            Order bid_order;
+            bid_order.price = rb;
+            bid_order.volume = 0.001;
+            bid_order.type = BID;
+            place_order(bid_order);
+
+            Order ask_order;
+            ask_order.price = ra;
+            ask_order.volume = 0.001;
+            ask_order.type = ASK;
+            place_order(ask_order);
+
+
+            for (auto &feedback: feedbacks) {
+                if (feedback.type == EXECUTE_ORDER) {
+                    if (orders[feedback.id_order].type == ASK) {
+                        capital_cash += orders[feedback.id_order].price * orders[feedback.id_order].volume;
+                        capital_coin -= orders[feedback.id_order].volume;
+                    } else if (orders[feedback.id_order].type == BID) {
+                        capital_cash -= orders[feedback.id_order].price * orders[feedback.id_order].volume;
+                        capital_coin += orders[feedback.id_order].volume;
+                    }
+                }
+            }
+
+            history_capital_cash.push_back(capital_cash);
+            history_capital_coin.push_back(capital_coin);
+            history_capital_common.push_back(capital_cash + capital_coin * mid_price);
+        }
 
     }
 };
 
 int main() {
     const long long INIT_RECEIVED = 1655942402249000000;
+    const long long END_RECEIVED = 1656028781526713137;
     const long long FEEDBACK_LATENCY = 1000000000;
     const long long POST_LATENCY = 1000000000;
-    Simulator simulator(INIT_RECEIVED, FEEDBACK_LATENCY, POST_LATENCY,
-                        "C:/CLionProjects/market-making/md/md/btcusdt_Binance_LinearPerpetual/lobs.csv",
-                        "C:/CLionProjects/market-making/md/md/btcusdt_Binance_LinearPerpetual/trades.csv");
 
-    double capital_usdt = 0;
-    double capital_btc = 0;
-    std::vector<double> capital_usdt_history;
-    std::vector<double> capital_btc_history;
-    std::vector<double> capital_sum_history;
-
-    auto res = simulator.tick();
-    MarketData current= res.first;
-    MarketData previous;
-    while (current.type == TRADE) {
-        res = simulator.tick();
-        current = res.first;
-    }
-    res = simulator.tick();
-    while (res.first.type == TRADE) {
-        res = simulator.tick();
-    }
-
-    std::unordered_map<size_t, Order> orders;
-
-    while(!simulator.market_orderbooks.empty() || !simulator.market_trades.empty()) {
-//        std::cout << simulator.ts <<  ' ' << simulator.strategy_updates.size() << '\n';
-
-        previous = current;
-        current = res.first;
-
-        Order order;
-        double mid_volume = (current.orderbook.ask_orderbook[0].second + current.orderbook.bid_orderbook[0].second) / 2;
-        double mid_price_current = (current.orderbook.ask_orderbook[0].first + current.orderbook.bid_orderbook[0].first) / 2;
-        double mid_price_previous = (previous.orderbook.ask_orderbook[0].first + previous.orderbook.bid_orderbook[0].first) / 2;
-        if (mid_price_current < mid_price_previous) {
-            order.type = ASK;
-        } else {
-            order.type = BID;
-        }
-        order.price = mid_price_current;
-        order.volume = mid_volume;
-        order.kill_time = 3000000000000;
-
-        size_t id_order = simulator.place_order(order);
-        orders.insert({id_order, order});
-
-        for (auto& feedback : res.second) {
-            if (feedback.type == EXECUTE_ORDER) {
-                if (orders[feedback.id_order].type == ASK) {
-                    capital_usdt += orders[feedback.id_order].price * orders[feedback.id_order].volume;
-                    capital_btc -= orders[feedback.id_order].volume;
-                } else if (orders[feedback.id_order].type == BID) {
-                    capital_usdt -= orders[feedback.id_order].price * orders[feedback.id_order].volume;
-                    capital_btc += orders[feedback.id_order].volume;
-                }
-            }
-        }
-
-        capital_usdt_history.push_back(capital_usdt);
-        capital_btc_history.push_back(capital_btc);
-        capital_sum_history.push_back(capital_usdt + capital_btc * mid_price_current);
-
-        res = simulator.tick();
-        while (res.first.type == TRADE) {
-            res = simulator.tick();
-        }
-    }
+    // launching strategy from paper with finite time
 
     std::ofstream file("C:/CLionProjects/market-making/results.txt");
-    for (auto capital : capital_usdt_history) {
-        file << capital << " ";
+    for (double gamma: {1.0, 0.7, 0.5, 0.2, 0.1, 0.05, 0.01}) {
+        long long kill_time = 10000000;
+        Simulator simulator(INIT_RECEIVED, FEEDBACK_LATENCY, POST_LATENCY,
+                            "C:/CLionProjects/market-making/md/md/btcusdt_Binance_LinearPerpetual/lobs.csv",
+                            "C:/CLionProjects/market-making/md/md/btcusdt_Binance_LinearPerpetual/trades.csv");
+
+
+        Strategy strategy(gamma, 1, INIT_RECEIVED, END_RECEIVED, simulator, kill_time);
+        strategy.launch_strategy_finite();
+        file << '#' << gamma << '\n';
+        for (auto capital: strategy.history_capital_cash) {
+            file << capital << " ";
+        }
+        file << '\n';
+        for (auto capital: strategy.history_capital_coin) {
+            file << capital << " ";
+        }
+        file << '\n';
+        for (auto capital: strategy.history_capital_common) {
+            file << capital << " ";
+        }
+        file << '\n';
+        for (auto capital: strategy.history_ts) {
+            file << capital << " ";
+        }
+
     }
-    file << '\n';
-    for (auto capital : capital_btc_history) {
-        file << capital << " ";
-    }
-    file << '\n';
-    for (auto capital : capital_sum_history) {
-        file << capital << " ";
-    }
-    file << '\n';
+
 
     return 0;
 }
